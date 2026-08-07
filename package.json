@@ -1,8 +1,11 @@
 {
-	"name": "vite-react-template",
-	"description": "A template for building a React application with Vite, Hono, and Cloudflare Workers",
-	"cloudflare": {
-		"label": "Vite React Template",
+	"name": "lelerunnerz",
+"description": "LELE Runner customer ordering application",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "cloudflare": {
+		"label": "LELE Runner",
 		"products": [
 			"Workers"
 		],
