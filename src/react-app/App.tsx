@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import beaverMascot from "./assets/lele-runner-beaver.png";
 import "./App.css";
 
 type Pricing = { markupRate: number; customsRate: number; deliveryRate: number; depositRate: number };
@@ -50,10 +51,6 @@ function calculate(items: Item[], pricing: Pricing, deliveryMethod: "collection"
 	return { subtotal, markup, customs, delivery, total, deposit: total * (pricing.depositRate / 100), balance: total * (1 - pricing.depositRate / 100) };
 }
 
-function SprintLogo() {
-	return <svg className="sprint-logo" viewBox="0 0 48 36" aria-hidden="true"><path d="M17 5.3c0-2 1.6-3.6 3.6-3.6s3.6 1.6 3.6 3.6-1.6 3.6-3.6 3.6S17 7.3 17 5.3Zm3.4 5.8 5.2 4.4 9.7-1.1c1.4-.2 2.7.8 2.8 2.2.1 1.4-.8 2.6-2.1 2.8L24.6 21c-.9.1-1.8-.1-2.5-.7l-4.8-4-3.9 7.3 7.1 4.1c1.2.7 1.6 2.2.9 3.4-.7 1.2-2.2 1.6-3.4.9L8.2 26.4c-1.2-.7-1.7-2.2-1-3.5l6.3-11.7c1.3-2.4 4.8-2 6.9-.1Z" /><path d="M27.5 21.5c1.1-.9 2.7-.7 3.6.4l5.2 6.5 7 .7c1.4.1 2.4 1.3 2.3 2.7-.1 1.3-1.2 2.3-2.5 2.3h-.2l-8.1-.9c-.7-.1-1.3-.4-1.8-.9l-5.9-7.3c-.9-1.1-.7-2.7.4-3.6Z" /></svg>;
-}
-
 function JourneySteps() {
 	const steps = ["Your details", "Products", "Delivery & quote", "Submit & track"];
 	return <ol className="journey" aria-label="Order steps">{steps.map((step, index) => <li key={step}><span>{index + 1}</span><strong>{step}</strong></li>)}</ol>;
@@ -66,7 +63,7 @@ function StatusPill({ status }: { status: string }) {
 
 function Header({ view, setView }: { view: "customer" | "admin"; setView: (view: "customer" | "admin") => void }) {
 	return <>
-		<header className="topbar"><div className="nav"><button className="brand" onClick={() => setView("customer")}><SprintLogo /><span>LELE RUNNER</span></button><div className="nav-actions"><div className="business-lines"><a className="business-link" href={`https://wa.me/${BUSINESS_WHATSAPP}`} target="_blank" rel="noreferrer">Line 1: +263 773 835 075</a><a className="business-link" href={`https://wa.me/${BACKUP_WHATSAPP}`} target="_blank" rel="noreferrer">Line 2: +263 775 123 428</a></div><button className="admin-link" onClick={() => setView(view === "admin" ? "customer" : "admin")}>{view === "admin" ? "Customer page" : "Admin sign in"}</button></div></div></header>
+		<header className="topbar"><div className="nav"><button className="brand" onClick={() => setView("customer")}><span className="mascot-frame"><img className="beaver-mascot" src={beaverMascot} alt="LELE Runner beaver parcel mascot" /></span><span>LELE RUNNER</span></button><div className="nav-actions"><div className="business-lines"><a className="business-link" href={`https://wa.me/${BUSINESS_WHATSAPP}`} target="_blank" rel="noreferrer">Line 1: +263 773 835 075</a><a className="business-link" href={`https://wa.me/${BACKUP_WHATSAPP}`} target="_blank" rel="noreferrer">Line 2: +263 775 123 428</a></div><button className="admin-link" onClick={() => setView(view === "admin" ? "customer" : "admin")}>{view === "admin" ? "Customer page" : "Admin sign in"}</button></div></div></header>
 		<div className="airmail" />
 	</>;
 }
@@ -136,5 +133,5 @@ function AdminPage() {
 
 export default function App() {
 	const [view, setView] = useState<"customer" | "admin">("customer");
-	return <><Header view={view} setView={setView} />{view === "customer" ? <CustomerPage /> : <AdminPage />}<footer>LELE Runner · SHEIN orders, tracking and customer updates</footer></>;
+	return <><Header view={view} setView={setView} />{view === "customer" ? <CustomerPage /> : <AdminPage />}<footer><span>LELE Runner · SHEIN orders, tracking and customer updates</span><span className="design-credit">Application design by <strong>Paulic Designs</strong> · For advertisements and custom business applications</span></footer></>;
 }
