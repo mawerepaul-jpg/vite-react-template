@@ -4,6 +4,11 @@ type Bindings = {
 	DB: D1Database;
 	SESSION_SECRET: string;
 	SETUP_TOKEN: string;
+	WHATSAPP_ACCESS_TOKEN?: string;
+	WHATSAPP_PHONE_NUMBER_ID?: string;
+	WHATSAPP_TEST_RECIPIENT?: string;
+	WHATSAPP_MODE?: string;
+	WHATSAPP_TEMPLATE_NAME?: string;
 };
 
 type ItemInput = {
@@ -141,6 +146,86 @@ async function requireAdmin(request: Request, bindings: Bindings) {
 
 async function addEvent(db: D1Database, orderId: number, status: string, note: string, actorEmail?: string) {
 	await db.prepare("INSERT INTO order_events (order_id, status, note, actor_email, created_at) VALUES (?, ?, ?, ?, ?)").bind(orderId, status, note, actorEmail || null, new Date().toISOString()).run();
+}
+
+function normalizeWhatsAppNumber(phone: string) {
+	const digits = String(phone || "").replace(/\D/g, "");
+	if (digits.startsWith("0")) return `263${digits.slice(1)}`;
+	return digits;
+}
+
+function statusText(status: string) {
+	const messages: Record<string, string> = {
+		[STATUS.quoteAcceptance]: "Your final quote is ready. Please review and accept it using your private tracking link.",
+		[STATUS.deposit]: "Your final quote was accepted. Please pay the required deposit and submit the payment reference through your private tracking link.",
+		[STATUS.depositVerification]: "Your payment reference was received and is being checked by LELE Runner.",
+		[STATUS.placed]: "Your payment was verified. LELE Runner has placed your order.",
+		[STATUS.purchased]: "Your items have been purchased from the supplier.",
+		[STATUS.shipped]: "Your order has been shipped and is moving to Zimbabwe.",
+		[STATUS.customs]: "Your order is in the customs process.",
+		[STATUS.outForDelivery]: "Your parcel is out for delivery.",
+		[STATUS.delivered]: "Thank you for using LELE Runner. Your order was successfully delivered.",
+		[STATUS.cancelled]: "Your order was cancelled. Please contact LELE Runner if you need assistance.",
+		[STATUS.refundPending]: "Your refund is being processed.",
+		[STATUS.refunded]: "Your refund has been completed. Thank you for your patience.",
+	};
+	return messages[status] || `Your order status is now: ${status}.`;
+}
+
+async function logWhatsApp(db: D1Database, orderId: number | null, recipient: string, eventStatus: string, state: string, templateName: string, response: string, providerMessageId?: string | null, error?: string | null) {
+	await db.prepare("INSERT INTO whatsapp_notifications (order_id, recipient, event_status, delivery_state, template_name, provider_message_id, provider_response, error_message, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(orderId, recipient, eventStatus, state, templateName, providerMessageId || null, response || null, error || null, new Date().toISOString()).run();
+}
+
+async function sendWhatsAppStatus(env: Bindings, order: { id: number; order_code: string; customer_phone: string; whatsapp_consent: number | boolean }, status: string) {
+	if (!order.whatsapp_consent) {
+		await logWhatsApp(env.DB, order.id, normalizeWhatsAppNumber(order.customer_phone), status, "skipped", "consent_required", "Customer did not opt in to WhatsApp updates");
+		return { sent: false, reason: "no consent" };
+	}
+	if (!env.WHATSAPP_ACCESS_TOKEN || !env.WHATSAPP_PHONE_NUMBER_ID) {
+		await logWhatsApp(env.DB, order.id, normalizeWhatsAppNumber(order.customer_phone), status, "skipped", "not_configured", "WhatsApp API secrets are not configured");
+		return { sent: false, reason: "not configured" };
+	}
+	const testMode = env.WHATSAPP_MODE === "test";
+	const recipient = testMode ? normalizeWhatsAppNumber(env.WHATSAPP_TEST_RECIPIENT || "") : normalizeWhatsAppNumber(order.customer_phone);
+	if (!recipient) return { sent: false, reason: "no recipient" };
+	const templateName = testMode ? "hello_world" : (env.WHATSAPP_TEMPLATE_NAME || "order_status_update");
+	const message = testMode ? {
+		messaging_product: "whatsapp", to: recipient, type: "template", template: { name: "hello_world", language: { code: "en_US" } }
+	} : {
+		messaging_product: "whatsapp", to: recipient, type: "template", template: {
+			name: templateName, language: { code: "en_US" }, components: [{ type: "body", parameters: [
+				{ type: "text", text: order.order_code }, { type: "text", text: status }, { type: "text", text: statusText(status) }
+			] }]
+		}
+	};
+	try {
+		const result = await fetch(`https://graph.facebook.com/v26.0/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+			method: "POST", headers: { Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}`, "Content-Type": "application/json" }, body: JSON.stringify(message),
+		});
+		const raw = await result.text();
+		let providerMessageId: string | null = null;
+		try { providerMessageId = JSON.parse(raw)?.messages?.[0]?.id || null; } catch { /* raw response retained below */ }
+		await logWhatsApp(env.DB, order.id, recipient, status, result.ok ? "sent" : "failed", templateName, raw, providerMessageId, result.ok ? null : raw);
+		return { sent: result.ok, response: raw };
+	} catch (error) {
+		const messageText = error instanceof Error ? error.message : "WhatsApp request failed";
+		await logWhatsApp(env.DB, order.id, recipient, status, "failed", templateName, "", null, messageText);
+		return { sent: false, reason: messageText };
+	}
+}
+
+async function sendWhatsAppTest(env: Bindings) {
+	if (!env.WHATSAPP_ACCESS_TOKEN || !env.WHATSAPP_PHONE_NUMBER_ID || !env.WHATSAPP_TEST_RECIPIENT) return { sent: false, reason: "WhatsApp test secrets are incomplete." };
+	const recipient = normalizeWhatsAppNumber(env.WHATSAPP_TEST_RECIPIENT);
+	try {
+		const result = await fetch(`https://graph.facebook.com/v26.0/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+			method: "POST", headers: { Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}`, "Content-Type": "application/json" },
+			body: JSON.stringify({ messaging_product: "whatsapp", to: recipient, type: "template", template: { name: "hello_world", language: { code: "en_US" } } }),
+		});
+		const raw = await result.text();
+		await logWhatsApp(env.DB, null, recipient, "API test", result.ok ? "sent" : "failed", "hello_world", raw, null, result.ok ? null : raw);
+		return { sent: result.ok, response: raw };
+	} catch (error) { return { sent: false, reason: error instanceof Error ? error.message : "WhatsApp test failed" }; }
 }
 
 app.get("/api/health", (c) => c.json({ ok: true }));
@@ -315,7 +400,7 @@ app.put("/api/admin/orders/:id/quote", async (c) => {
 	if (!admin) return jsonError("Sign in required.", 401);
 	const body = await c.req.json<{ items?: ItemInput[]; finalQuoteNote?: string }>();
 	const orderId = Number(c.req.param("id"));
-	const order = await c.env.DB.prepare("SELECT id, status, delivery_method, markup_rate, customs_rate, delivery_rate, deposit_rate FROM orders WHERE id = ?").bind(orderId).first<Record<string, unknown>>();
+	const order = await c.env.DB.prepare("SELECT id, status, order_code, customer_phone, whatsapp_consent, delivery_method, markup_rate, customs_rate, delivery_rate, deposit_rate FROM orders WHERE id = ?").bind(orderId).first<Record<string, unknown>>();
 	if (!order) return jsonError("Order not found.", 404);
 	if (order.status !== STATUS.priceReview) return jsonError("Only orders awaiting price verification can be quoted.");
 	const items = Array.isArray(body.items) ? body.items : [];
@@ -332,7 +417,8 @@ app.put("/api/admin/orders/:id/quote", async (c) => {
 		`UPDATE orders SET status = ?, quote_status = ?, final_quote_note = ?, subtotal = ?, markup_amount = ?, customs_amount = ?, delivery_amount = ?, total_amount = ?, deposit_amount = ?, balance_amount = ?, price_verified_at = ?, price_verified_by = ?, updated_at = ? WHERE id = ?`
 	).bind(STATUS.quoteAcceptance, "issued", String(body.finalQuoteNote || "").trim() || null, totals.subtotal, totals.markup, totals.customs, totals.delivery, totals.total, totals.deposit, totals.balance, now, admin.sub, now, orderId).run();
 	await addEvent(c.env.DB, orderId, STATUS.quoteAcceptance, "Staff verified item prices and issued final quote", admin.email);
-	return c.json({ ok: true, status: STATUS.quoteAcceptance, totals });
+	const notification = await sendWhatsAppStatus(c.env, { id: orderId, order_code: String(order.order_code), customer_phone: String(order.customer_phone), whatsapp_consent: Number(order.whatsapp_consent) }, STATUS.quoteAcceptance);
+	return c.json({ ok: true, status: STATUS.quoteAcceptance, totals, notification });
 });
 
 app.patch("/api/admin/orders/:id/status", async (c) => {
@@ -342,7 +428,7 @@ app.patch("/api/admin/orders/:id/status", async (c) => {
 	const status = String(body.status || "");
 	if (!VALID_STATUSES.includes(status as (typeof VALID_STATUSES)[number])) return jsonError("Invalid order status.");
 	const orderId = Number(c.req.param("id"));
-	const current = await c.env.DB.prepare("SELECT id, status FROM orders WHERE id = ?").bind(orderId).first<{ id: number; status: string }>();
+	const current = await c.env.DB.prepare("SELECT id, status, order_code, customer_phone, whatsapp_consent FROM orders WHERE id = ?").bind(orderId).first<{ id: number; status: string; order_code: string; customer_phone: string; whatsapp_consent: number }>();
 	if (!current) return jsonError("Order not found.", 404);
 	if (current.status === STATUS.priceReview && status !== STATUS.cancelled) return jsonError("Verify and issue the quote before moving this order forward.");
 	if (current.status === STATUS.quoteAcceptance && status !== STATUS.cancelled && status !== STATUS.refundPending) return jsonError("Wait for customer quote acceptance before moving this order forward.");
@@ -356,7 +442,15 @@ app.patch("/api/admin/orders/:id/status", async (c) => {
 		status, paymentVerifiedAt, status === STATUS.placed ? admin.sub : null, refundAmount, refundAmount, refundStatus, status, STATUS.cancelled, String(body.note || "").trim() || null, now, orderId
 	).run();
 	await addEvent(c.env.DB, orderId, status, String(body.note || "Status changed by staff"), admin.email);
-	return c.json({ ok: true, status });
+	const notification = await sendWhatsAppStatus(c.env, current, status);
+	return c.json({ ok: true, status, notification });
+});
+
+app.post("/api/admin/whatsapp/test", async (c) => {
+	if (!(await requireAdmin(c.req.raw, c.env))) return jsonError("Sign in required.", 401);
+	const result = await sendWhatsAppTest(c.env);
+	if (!result.sent) return jsonError(result.reason || "WhatsApp test could not be sent.", 502);
+	return c.json({ ok: true, message: "WhatsApp test message sent." });
 });
 
 export default app;
