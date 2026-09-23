@@ -487,10 +487,13 @@ async function getConversation(db: D1Database, phone: string) {
 }
 
 async function saveConversation(db: D1Database, phone: string, state: string, draft: WhatsAppDraft, lastOrderCode?: string | null, marketingOptedIn?: boolean) {
+	// The column is NOT NULL. Preserve its existing value when the caller does not change consent.
+	const existing = await getConversation(db, phone);
+	const effectiveConsent = marketingOptedIn === undefined ? (existing?.marketing_opted_in || 0) : (marketingOptedIn ? 1 : 0);
 	await db.prepare(`INSERT INTO whatsapp_conversations (customer_phone, state, draft_json, last_order_code, marketing_opted_in, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT(customer_phone) DO UPDATE SET state = excluded.state, draft_json = excluded.draft_json, last_order_code = COALESCE(excluded.last_order_code, whatsapp_conversations.last_order_code), marketing_opted_in = COALESCE(excluded.marketing_opted_in, whatsapp_conversations.marketing_opted_in), updated_at = excluded.updated_at`)
-		.bind(phone, state, JSON.stringify(draft), lastOrderCode || null, marketingOptedIn === undefined ? null : (marketingOptedIn ? 1 : 0), new Date().toISOString()).run();
+		ON CONFLICT(customer_phone) DO UPDATE SET state = excluded.state, draft_json = excluded.draft_json, last_order_code = COALESCE(excluded.last_order_code, whatsapp_conversations.last_order_code), marketing_opted_in = excluded.marketing_opted_in, updated_at = excluded.updated_at`)
+		.bind(phone, state, JSON.stringify(draft), lastOrderCode || null, effectiveConsent, new Date().toISOString()).run();
 }
 
 function assistantMenu() {
