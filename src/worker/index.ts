@@ -9,6 +9,7 @@ type Bindings = {
 	WHATSAPP_TEST_RECIPIENT?: string;
 	WHATSAPP_MODE?: string;
 	WHATSAPP_TEMPLATE_NAME?: string;
+	WHATSAPP_TEMPLATE_LANGUAGE?: string;
 	WHATSAPP_WEBHOOK_VERIFY_TOKEN?: string;
 };
 
@@ -194,8 +195,10 @@ async function sendWhatsAppStatus(env: Bindings, order: { id: number; order_code
 		messaging_product: "whatsapp", to: recipient, type: "template", template: { name: "hello_world", language: { code: "en_US" } }
 	} : {
 		messaging_product: "whatsapp", to: recipient, type: "template", template: {
-			name: templateName, language: { code: "en_US" }, components: [{ type: "body", parameters: [
-				{ type: "text", text: order.order_code }, { type: "text", text: status }, { type: "text", text: statusText(status) }
+			name: templateName, language: { code: env.WHATSAPP_TEMPLATE_LANGUAGE || "en" }, components: [{ type: "body", parameters: [
+				{ type: "text", parameter_name: "order_id", text: order.order_code },
+				{ type: "text", parameter_name: "order_status", text: status },
+				{ type: "text", parameter_name: "update_message", text: statusText(status) }
 			] }]
 		}
 	};
