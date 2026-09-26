@@ -391,7 +391,7 @@ app.put("/api/admin/pricing", async (c) => {
 app.get("/api/admin/orders", async (c) => {
 	if (!(await requireAdmin(c.req.raw, c.env))) return jsonError("Sign in required.", 401);
 	const orders = await c.env.DB.prepare(
-		`SELECT id, order_code, customer_name, customer_phone, delivery_method, payment_reference, status, quote_status,
+		`SELECT id, order_code, customer_name, customer_phone, delivery_method, payment_reference, status, quote_status, whatsapp_consent,
 		total_amount, deposit_amount, balance_amount, final_quote_note, refund_amount, refund_status, created_at, updated_at FROM orders ORDER BY created_at DESC`
 	).all();
 	const items = await c.env.DB.prepare("SELECT id, order_id, product_link, product_name, unit_price, quantity, notes FROM order_items ORDER BY id").all<Record<string, unknown>>();

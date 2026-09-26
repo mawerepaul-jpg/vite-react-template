@@ -9,3 +9,6 @@ footer{display:flex;flex-direction:column;gap:5px;text-align:center;padding:0 18
 
 /* WhatsApp-first ordering and photo hand-off */
 .whatsapp-order-shortcut{display:inline-flex;align-items:center;justify-content:center;margin-top:16px;padding:10px 14px;border:1px solid #8fb69a;border-radius:999px;background:#f0f7ef;color:var(--green);font-size:12px;font-weight:800;text-decoration:none}.whatsapp-order-shortcut:hover{background:#e2f1e4}.photo-input{padding:10px 11px;border:1px dashed #a69a7f;border-radius:7px;background:#fffdf8}.photo-input input{padding:7px 0;border:0;background:transparent;font-size:12px}.photo-input small{color:#65725e}.photo-whatsapp-note{margin:14px 0;padding:12px;border:1px solid #8fb69a;border-radius:8px;background:#f0f7ef;color:#426149;text-align:left}.photo-whatsapp-note strong{font-size:12px}.photo-whatsapp-note p{margin:4px 0 0;font-size:12px;line-height:1.45}
+
+/* Free WhatsApp-first staff update option */
+.manual-update-row{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin:11px 0}.manual-whatsapp{background:#2d7a4b;text-decoration:none}.manual-whatsapp:hover{background:#23613b}@media(max-width:720px){.manual-update-row{align-items:flex-start;flex-direction:column}}
